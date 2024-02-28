@@ -2,6 +2,8 @@ const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 
 function Validator(formSelector, options = {}) {
+  const _this = this;
+
   function getParent(element, selector) {
     while (element.parentElement) {
       let parentElement = element.parentElement;
@@ -116,6 +118,7 @@ function Validator(formSelector, options = {}) {
 
     formElement.addEventListener("submit", e => {
       e.preventDefault();
+
       let isValid = true;
       inputs.forEach(input => {
         if (!handleValidate({ target: input })) {
@@ -124,7 +127,7 @@ function Validator(formSelector, options = {}) {
       });
 
       if (isValid) {
-        if (typeof options.onSubmit === "function") {
+        if (typeof _this.onSubmit === "function") {
           const enableInputs = formElement.querySelectorAll("[name]:not([disabled])");
           const formValues = Array.from(enableInputs).reduce((values, input) => {
             switch (input.type) {
@@ -151,7 +154,7 @@ function Validator(formSelector, options = {}) {
           }, {});
 
           // Submit with JavaScript
-          options.onSubmit(formValues);
+          _this.onSubmit(formValues);
         } else {
           // Submit with default behavior
           formElement.submit();
