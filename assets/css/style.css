@@ -87,6 +87,15 @@ html {
   padding-top: 4px;
 }
 
+.form-group.radio {
+  display: block;
+  text-align: left;
+}
+
+.form-group.radio .form-label {
+  display: block;
+}
+
 .form-submit {
   border: none;
   background-color: #1dbfaf;
