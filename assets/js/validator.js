@@ -1,80 +1,129 @@
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 
-function Validator(options) {
+function Validator(formSelector, options = {}) {
   function getParent(element, selector) {
     while (element.parentElement) {
-      if (element.parentElement.matches(selector)) {
-        return element.parentElement;
+      let parentElement = element.parentElement;
+      if (parentElement.matches(selector)) {
+        return parentElement;
       }
-      element = element.parentElement;
+      element = parentElement;
     }
   }
 
-  function removeInvalidState(inputElement) {
-    const parentElement = getParent(inputElement, options.formGroupSelector);
-    const errorElement = parentElement.querySelector(options.errorSelector);
-
-    parentElement.classList.remove("invalid");
-    errorElement.innerText = "";
-  }
-
-  let selectorRules = {};
-
-  function validateControl(inputElement, rule) {
-    const parentElement = getParent(inputElement, options.formGroupSelector);
-    const errorElement = parentElement.querySelector(options.errorSelector);
-    let isError;
-
-    // Get rules of selector
-    let rules = selectorRules[rule.selector];
-
-    // Loop through each rule and stop if error
-    for (let index = 0; index < rules.length; index++) {
-      switch (inputElement.type) {
-        case "radio":
-        case "checkbox":
-          isError = rules[index](
-            formElement.querySelector(rule.selector + ":checked")
-          );
-          break;
-
-        default:
-          isError = rules[index](inputElement.value);
-      }
-      if (isError) {
-        break;
+  let formRules = {};
+  const defaultMessage = "Vui lòng nhập trường này!";
+  let validatorRules = {
+    required: (value, message = defaultMessage) => {
+      return value.trim()
+        ? undefined
+        : message;
+    },
+    email: (value) => {
+      return (/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(value))
+        ? undefined
+        : "Trường này phải là email!";
+    },
+    min: min => {
+      return (value) => {
+        return value.length >= min
+          ? undefined
+          : `Vui lòng nhập tối thiểu ${min} ký tự!`;
       }
     }
+  };
 
-    if (isError) {
-      errorElement.innerText = isError;
-      parentElement.classList.add("invalid");
-    } else {
-      removeInvalidState(inputElement);
-    }
-
-    // Convert to boolean type
-    return !!isError;
-  }
-
-  const formElement = $(options.form);
+  const formElement = $(formSelector);
   if (formElement) {
+    const inputs = formElement.querySelectorAll("[name][rules]");
+    if (inputs) {
+      inputs.forEach(input => {
+        let rules = input.getAttribute("rules").split("|");
+        if (rules) {
+          rules.forEach(rule => {
+            let ruleInfo;
+            const isRuleHasValue = rule.includes(':');
+
+            if (isRuleHasValue) {
+              ruleInfo = rule.split(':');
+              rule = ruleInfo[0];
+            }
+
+            let ruleFunc = validatorRules[rule];
+
+            if (isRuleHasValue) {
+              ruleFunc = ruleFunc(ruleInfo[1]);
+            }
+
+            if (Array.isArray(formRules[input.name])) {
+              formRules[input.name].push(ruleFunc);
+            } else {
+              formRules[input.name] = [ruleFunc];
+            }
+          });
+        }
+
+        input.addEventListener("blur", handleValidate);
+        input.addEventListener("input", e => {
+          const formGroup = getParent(e.target, ".form-group");
+          let formMessage;
+          if (formGroup) {
+            formGroup.classList.remove("invalid");
+            formMessage = formGroup.querySelector(".form-message");
+            if (formMessage) {
+              formMessage.innerText = "";
+            }
+          }
+        });
+      });
+
+      // Validate function
+      function handleValidate(event) {
+        let rules = formRules[event.target.name];
+        let errorMessage;
+
+        rules.some(rule => {
+          errorMessage = rule(event.target.value);
+          return errorMessage;
+        });
+
+        const formGroup = getParent(event.target, ".form-group");
+        let formMessage;
+        if (formGroup) {
+          formMessage = formGroup.querySelector(".form-message");
+        }
+
+        // Show error message if error
+        if (errorMessage) {
+          if (formGroup) {
+            formGroup.classList.add("invalid");
+          }
+          if (formMessage) {
+            formMessage.innerText = errorMessage;
+          }
+        } else {
+          if (formGroup) {
+            formGroup.classList.remove("invalid");
+          }
+          if (formMessage) {
+            formMessage.innerText = "";
+          }
+        }
+        return !errorMessage;
+      }
+    }
+
     formElement.addEventListener("submit", e => {
       e.preventDefault();
-
-      let isFormValid = true;
-
-      // Loop through each rule and validate
-      options.rules.forEach(rule => {
-        let inputElement = formElement.querySelector(rule.selector);
-        let isValid = !validateControl(inputElement, rule);
-        if (!isValid) {
-          isFormValid = false;
+      let isValid = true;
+      inputs.forEach(input => {
+        if (!handleValidate({ target: input })) {
+          isValid = false;
         }
       });
 
-      if (isFormValid) {
+      if (isValid) {
         if (typeof options.onSubmit === "function") {
           const enableInputs = formElement.querySelectorAll("[name]:not([disabled])");
           const formValues = Array.from(enableInputs).reduce((values, input) => {
@@ -109,123 +158,5 @@ function Validator(options) {
         }
       }
     });
-
-    // Loop through each rule and listen to event like blur, input, ...
-    options.rules.forEach(rule => {
-      // Saving rules for each input
-      if (Array.isArray(selectorRules[rule.selector])) {
-        selectorRules[rule.selector].push(rule.validate);
-      } else {
-        selectorRules[rule.selector] = [rule.validate];
-      }
-
-      const inputElements = formElement.querySelectorAll(rule.selector);
-
-      if (inputElements) {
-        Array.from(inputElements).forEach(inputElement => {
-          inputElement.addEventListener("blur", () => {
-            validateControl(inputElement, rule);
-          });
-
-          inputElement.addEventListener("input", () => {
-            removeInvalidState(inputElement);
-          });
-        });
-      }
-    });
   }
 }
-
-Validator.isRequired = (
-  selector,
-  message = "Giá trị nhập không chính xác!"
-) => ({
-  selector: selector,
-  validate: value => {
-    if (typeof value == "string") {
-      value = value.trim();
-    }
-
-    return !value
-      ? message
-      : undefined;
-  }
-})
-
-Validator.isEmail = (
-  selector,
-  message = "Giá trị nhập không chính xác!"
-) => ({
-  selector: selector,
-  validate: value => {
-    return !(/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(value))
-      ? message
-      : undefined;
-  }
-})
-
-Validator.isMinLength = (
-  selector,
-  min = 6,
-  message = "Giá trị nhập không chính xác!"
-) => ({
-  selector: selector,
-  validate: value => {
-    return !(value.trim().length >= min)
-      ? `${message} (${min})`
-      : undefined;
-  }
-})
-
-Validator.isConfirmed = (
-  selector,
-  getConfirmValue,
-  message = "Giá trị nhập không chính xác!"
-) => ({
-  selector: selector,
-  validate: value => {
-    return !(value === getConfirmValue())
-      ? message
-      : undefined;
-  }
-})
-
-Validator({
-  form: "#form-1",
-  formGroupSelector: ".form-group",
-  errorSelector: ".form-message",
-  rules: [
-    Validator.isRequired(
-      "#fullname",
-      "Vui lòng nhập Họ và Tên!"
-    ),
-
-    Validator.isEmail(
-      "#email",
-      "Trường này phải là email!"
-    ),
-
-    Validator.isMinLength(
-      "#password",
-      8,
-      "Vui lòng nhập đủ số kí tự tối thiểu"
-    ),
-
-    Validator.isConfirmed(
-      "#password_confirmation",
-      () => $("#form-1 #password").value,
-      "Mật khẩu nhập lại không chính xác!"
-    ),
-
-    Validator.isRequired(
-      'input[name="gender"]',
-      "Vui lòng chọn giới tính!"
-    ),
-
-    Validator.isRequired(
-      "#province",
-      "Vui lòng chọn nơi cư trú!"
-    )
-  ],
-  onSubmit: data => console.log(data)
-});
